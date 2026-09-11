@@ -6,6 +6,7 @@ vi.mock("../src/logger.js", () => ({
 }));
 
 vi.mock("../src/config.js", () => ({
+  getEnvVar: vi.fn(() => undefined),
   getAgentId: vi.fn(() => undefined),
   isConsolidationEnabled: vi.fn(() => true),
   isGraphExtractionEnabled: vi.fn(() => false),

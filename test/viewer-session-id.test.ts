@@ -145,6 +145,7 @@ function loadViewerSandbox() {
     })(),
     fetch: async () => ({ ok: true, json: async () => ({}) }),
     WebSocket: function WebSocket() {},
+    MutationObserver: class { observe() {} },
     navigator: { userAgent: "vitest" },
     Element: function Element() {},
     alert: () => {},
@@ -177,6 +178,42 @@ function loadViewerSandbox() {
 }
 
 describe("viewer session rendering", () => {
+  it("shows rejected response cost separately from total cost", () => {
+    const {sandbox,getElement}=loadViewerSandbox();
+    sandbox.state.dashboard={loaded:true,health:{status:'healthy',health:{},analysis:{enabled:true,calls:33,rejectedResponses:15,estimatedUsd:.0727,rejectedEstimatedUsd:.0442,priceAsOf:'2026-09-06'}},sessions:[],memories:[],graphStats:null,recentAudit:[],lessons:[],crystals:[]};
+    sandbox.renderDashboard(); const html=getElement('view-dashboard').innerHTML;
+    expect(html).toContain('$0.0727'); expect(html).toContain('$0.0442'); expect(html).toContain('Rejected response cost');
+  });
+  it("renders an object summary title verbatim instead of object coercion", () => {
+    const { sandbox, getElement } = loadViewerSandbox();
+    sandbox.state.sessions.items = [{id:'s1',project:'test',status:'completed',startedAt:'2026-09-05',summary:{title:'Memories',narrative:'Original English text'}}];
+    sandbox.renderSessions();
+    const html = getElement('view-sessions').innerHTML;
+    expect(html).toContain('Memories');
+    expect(html).not.toContain('[object Object]');
+    expect(html).not.toContain('data-ui-en="Memories"');
+  });
+  it("translates only explicitly marked UI and persists the language choice", () => {
+    const { sandbox, getElement } = loadViewerSandbox();
+    const label = getElement('ui-label');
+    label.setAttribute('data-ui-en', 'Memories');
+    label.textContent = 'Memories';
+    const record = getElement('memory-title');
+    record.textContent = 'Memories';
+    sandbox.document.querySelectorAll = (selector: string) => selector === '[data-ui-en]' ? [label] : [];
+    const saved: string[][] = [];
+    sandbox.localStorage.setItem = (key: string, value: string) => saved.push([key, value]);
+    const select = getElement('viewer-language');
+    select.value = 'ko';
+    select.listeners.get('change')[0]();
+    expect(label.textContent).toBe('메모리');
+    expect(record.textContent).toBe('Memories');
+    expect(saved).toContainEqual(['agentmemory-viewer-language', 'ko']);
+    select.value = 'en';
+    select.listeners.get('change')[0]();
+    expect(label.textContent).toBe('Memories');
+    expect(record.textContent).toBe('Memories');
+  });
   it("attaches the saved viewer bearer to API calls", async () => {
     const { sandbox } = loadViewerSandbox();
     const requests: Array<{ url: string; opts: { headers?: Record<string, string> } }> = [];

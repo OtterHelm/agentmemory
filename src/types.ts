@@ -136,6 +136,47 @@ export interface SessionSummary {
   observationCount: number;
 }
 
+export interface AnalysisUsage {
+  id: string;
+  sessionId: string;
+  phase: "summary" | "graph";
+  timestamp: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheHitTokens: number;
+  finishReason: string;
+  outcome?: "valid" | "invalid";
+}
+
+export interface AnalysisStage {
+  batchLimit?: number;
+  held?: Record<string, { digest: string; error: string }>;
+  persistenceFailures?: number;
+  done: Record<string, string>;
+  attempts: number;
+  error?: string;
+  batch?: {
+    id: string;
+    observations: CompressedObservation[];
+    previousSummary?: SessionSummary;
+    result?: { summary?: SessionSummary; nodes?: GraphNode[]; edges?: GraphEdge[] };
+  };
+}
+
+export interface IncrementalAnalysisState {
+  version: 1;
+  stabilizationVersion?: 2;
+  scheduledIntervalMs?: number;
+  sessionId: string;
+  legacy: Record<string, string>;
+  summary: AnalysisStage;
+  graph: AnalysisStage;
+  nextAt: number | null;
+  lastStartedAt: number;
+  blocked?: boolean;
+}
+
 export type HookType =
   | "session_start"
   | "prompt_submit"

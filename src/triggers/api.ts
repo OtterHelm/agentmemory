@@ -14,6 +14,7 @@ import { renderViewerDocument } from "../viewer/document.js";
 import { getBoundViewerPort, getViewerSkipped } from "../viewer/server.js";
 import { MAX_FILES_UPPER_BOUND } from "../functions/replay.js";
 import { logger } from "../logger.js";
+import { analysisStatus, incrementalEnabled } from "../functions/incremental-analysis.js";
 import {
   isGraphExtractionEnabled,
   isConsolidationEnabled,
@@ -282,6 +283,7 @@ export function registerApiTriggers(
           health: health || null,
           functionMetrics,
           circuitBreaker,
+          ...(incrementalEnabled() ? { analysis: await analysisStatus(kv) } : {}),
           ...instanceInfo(),
         },
       };

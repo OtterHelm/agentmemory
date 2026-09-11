@@ -1,6 +1,7 @@
 import type { MemoryProvider } from "../types.js";
 import { getEnvVar } from "../config.js";
 import { fetchWithTimeout } from "./_fetch.js";
+import { analysisUsageContext, recordAnalysisUsage } from "../analysis-usage.js";
 import {
   DEFAULT_AZURE_API_VERSION,
   buildAuthHeaders,
@@ -95,6 +96,12 @@ export class OpenAIProvider implements MemoryProvider {
     if (this.reasoningEffort) {
       body.reasoning_effort = this.reasoningEffort;
     }
+    if (analysisUsageContext.getStore()?.phase === "graph" &&
+        new URL(this.baseUrl).hostname === "api.deepseek.com" &&
+        getEnvVar("AGENTMEMORY_GRAPH_NONTHINKING") === "true") {
+      body.thinking = { type: "disabled" };
+      delete body.reasoning_effort;
+    }
 
     // Bound the request via the shared fetchWithTimeout helper, which
     // owns the AbortController + clearTimeout cleanup for every raw-fetch
@@ -110,6 +117,7 @@ export class OpenAIProvider implements MemoryProvider {
           method: "POST",
           headers: buildAuthHeaders(this.apiKey, this.isAzure),
           body: JSON.stringify(body),
+          signal: analysisUsageContext.getStore() ? AbortSignal.timeout(Math.min(this.timeoutMs, 170_000)) : undefined,
         },
         this.timeoutMs,
       );
@@ -129,15 +137,23 @@ export class OpenAIProvider implements MemoryProvider {
     }
 
     const data = (await response.json()) as {
+      model?: string;
+      usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_cache_hit_tokens?: number };
       choices?: Array<{
+        finish_reason?: string;
         message?: { content?: string; reasoning?: string; reasoning_content?: string };
       }>;
     };
+    await recordAnalysisUsage(data);
+    if (analysisUsageContext.getStore() && data.choices?.[0]?.finish_reason === "length") {
+      throw new Error("Analysis output truncated; preserving pending observations");
+    }
     const message = data.choices?.[0]?.message;
     const content = message?.content;
     if (content) {
       return content;
     }
+    if (analysisUsageContext.getStore()) throw new Error("Analysis returned no final content");
     // Fallback: some thinking models return reasoning but no content.
     // DeepSeek V4 / Qwen3 / GLM / Kimi return `reasoning_content`;
     // older OpenAI o-series + some compatibles return `reasoning`. #627

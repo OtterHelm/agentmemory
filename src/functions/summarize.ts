@@ -203,7 +203,7 @@ function stripXmlWrappers(raw: string): string {
   return cleaned;
 }
 
-function parseSummaryXml(
+export function parseSummaryXml(
   xml: string,
   sessionId: string,
   project: string,

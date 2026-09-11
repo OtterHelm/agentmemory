@@ -376,7 +376,7 @@ function parseAttrs(raw: string): Record<string, string> {
   return attrs;
 }
 
-function parseGraphXml(
+export function parseGraphXml(
   xml: string,
   observationIds: string[],
 ): {

@@ -9,6 +9,7 @@ import {
   isConsolidationEnabled,
 } from "../config.js";
 import { logger } from "../logger.js";
+import { incrementalEnabled } from "../functions/incremental-analysis.js";
 
 // Global marker recording when corpus consolidation last ran, used to debounce
 // the per-turn session-stop fan-out.
@@ -94,6 +95,9 @@ export function registerEventTriggers(sdk: ISdk, kv: StateKV): void {
   });
 
   sdk.registerFunction("event::session::stopped", async (data: { sessionId: string; skipConsolidation?: boolean }) => {
+    if (incrementalEnabled()) {
+      return sdk.trigger({ function_id: "mem::analysis-enqueue", payload: { sessionId: data.sessionId } });
+    }
     const summary = await sdk.trigger({ function_id: "mem::summarize", payload: data });
     const fireVoid = (function_id: string, payload: unknown) =>
       sdk
@@ -181,6 +185,10 @@ export function registerEventTriggers(sdk: ISdk, kv: StateKV): void {
       const oldCount = payload.old_value?.observationCount ?? 0;
       const newCount = payload.new_value?.observationCount ?? 0;
       if (newCount <= oldCount) return { skipped: true };
+
+      if (incrementalEnabled()) {
+        await sdk.trigger({ function_id: "mem::analysis-enqueue", payload: { sessionId: payload.key, observationArriving: true }, action: TriggerAction.Void() });
+      }
 
       await sdk.trigger({
         function_id: "stream::send",

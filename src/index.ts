@@ -93,6 +93,7 @@ import { registerCompressFileFunction } from "./functions/compress-file.js";
 import { registerReplayFunctions } from "./functions/replay.js";
 import { registerApiTriggers } from "./triggers/api.js";
 import { registerEventTriggers } from "./triggers/events.js";
+import { registerIncrementalAnalysis } from "./functions/incremental-analysis.js";
 import { registerMcpEndpoints } from "./mcp/server.js";
 import { getAllTools } from "./mcp/tools-registry.js";
 import { startViewerServer } from "./viewer/server.js";
@@ -388,6 +389,7 @@ async function main() {
   registerRecentSearchesSweepFunction(sdk, kv);
 
   registerApiTriggers(sdk, kv, secret, metricsStore, provider);
+  await registerIncrementalAnalysis(sdk, kv, provider);
   registerEventTriggers(sdk, kv);
   registerMcpEndpoints(sdk, kv, secret);
 
