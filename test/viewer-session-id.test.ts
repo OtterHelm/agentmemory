@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import * as vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { renderViewerDocument } from "../src/viewer/document.js";

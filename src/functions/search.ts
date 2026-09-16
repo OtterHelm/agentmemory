@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import type { ISdk } from 'iii-sdk'
 import type { CompactSearchResult, CompressedObservation, Memory, SearchResult, Session } from '../types.js'
 import { KV } from '../state/schema.js'
@@ -9,6 +10,7 @@ import { memoryToObservation } from '../state/memory-utils.js'
 import { recordAccessBatch } from './access-tracker.js'
 import { logger } from "../logger.js";
 import { getAgentId, isAgentScopeIsolated } from "../config.js";
+import { searchSummaryUpdates } from "./summary-pipeline.js";
 
 let index: SearchIndex | null = null
 let vectorIndex: VectorIndex | null = null
@@ -584,7 +586,8 @@ export function registerSearchFunction(sdk: ISdk, kv: StateKV): void {
           return mem ? memoryToObservation(mem) : null
         })
       )
-      const enriched: SearchResult[] = []
+      const enriched: SearchResult[] = (await searchSummaryUpdates(kv, query, effectiveLimit, projectFilter, filterAgentId, cwdFilter))
+        .map(r => ({ observation: r.observation, sessionId: r.sessionId, score: r.score }));
       for (let i = 0; i < candidates.length; i++) {
         const obs = obsResults[i]
         if (!obs) continue

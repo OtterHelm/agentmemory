@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { OpenAIProvider } from '../src/providers/openai.js';
 import { analysisUsageContext, analysisCost } from '../src/analysis-usage.js';

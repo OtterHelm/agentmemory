@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import type { ISdk } from "iii-sdk";
 import type {
   CompressedObservation,

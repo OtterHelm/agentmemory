@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import type { ISdk } from "iii-sdk";
 import type {
   Session,
@@ -18,6 +19,7 @@ import {
   renderPinnedContext,
 } from "./slots.js";
 import { getAgentId, isAgentScopeIsolated } from "../config.js";
+import { contextSummaryParts } from "./summary-pipeline.js";
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3);
@@ -188,13 +190,15 @@ export function registerContextFunction(
       for (let i = 0; i < sessions.length; i++) {
         const summary = summariesPerSession[i];
         if (summary) {
-          const content = `## ${summary.title}\n${summary.narrative}\nDecisions: ${summary.keyDecisions.join("; ")}\nFiles: ${summary.filesModified.join(", ")}`;
-          blocks.push({
-            type: "summary",
-            content,
-            tokens: estimateTokens(content),
-            recency: new Date(summary.createdAt).getTime(),
-          });
+          for (const part of await contextSummaryParts(kv, summary)) {
+            const content = `## ${part.title}\n${part.narrative}\nDecisions: ${part.keyDecisions.join("; ")}\nFiles: ${part.filesModified.join(", ")}`;
+            blocks.push({
+              type: "summary",
+              content,
+              tokens: estimateTokens(content),
+              recency: new Date(part.createdAt).getTime(),
+            });
+          }
         } else {
           sessionsNeedingObs.push(i);
         }

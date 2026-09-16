@@ -1,7 +1,13 @@
 # 증분 분석과 한국어 UI 커스텀 버전
+<!-- Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md. -->
 
 Agentmemory 0.9.29 기반의 별도 커스텀 브랜치입니다. 원본 라이선스와 저작권 표기를 유지합니다.
 기본 브랜치는 원본 코드이며, 커스텀 코드는 `codex/public-incremental-ko`에 있습니다.
+
+현재 커스텀 이미지는 `agentmemory-local:0.9.29-incremental-ko6`입니다.
+적응형 묶음 복구는 [ADAPTIVE-ANALYSIS.ko.md](ADAPTIVE-ANALYSIS.ko.md),
+선택적 2단계 요약은 [TWO-STAGE-SUMMARY.ko.md](TWO-STAGE-SUMMARY.ko.md)를 참고하세요.
+2단계 요약을 사용하려면 `AGENTMEMORY_TWO_STAGE_SUMMARY=true`를 별도로 설정합니다.
 
 ## 기능과 설정
 

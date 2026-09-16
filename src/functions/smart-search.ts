@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import type { ISdk } from "iii-sdk";
 import type {
   CompactLessonResult,
@@ -17,6 +18,7 @@ import {
 } from "../config.js";
 import { logger } from "../logger.js";
 import { getCounters } from "../telemetry/setup.js";
+import { searchSummaryUpdates, pendingSummaryObservations } from "./summary-pipeline.js";
 
 // #771: smart-search followup-rate diagnostic. Stored per session as
 // the most recent search payload, used to detect whether the next
@@ -209,14 +211,18 @@ export function registerSmartSearchFunction(
             .slice(0, limit)
         : hybridResults.slice(0, limit);
 
-      const compact: CompactSearchResult[] = filteredHybrid.map((r) => ({
+      const updates = await searchSummaryUpdates(kv, data.query, limit, data.project, filterAgentId);
+      const compact: CompactSearchResult[] = [...updates.map(r => ({
+        obsId: r.observation.id, sessionId: r.sessionId, title: r.observation.title,
+        type: r.observation.type, score: r.score, timestamp: r.observation.timestamp,
+      })), ...filteredHybrid.map((r) => ({
         obsId: r.observation.id,
         sessionId: r.sessionId,
         title: r.observation.title,
         type: r.observation.type,
         score: r.combinedScore,
         timestamp: r.observation.timestamp,
-      }));
+      }))].slice(0, limit);
 
       void recordAccessBatch(
         kv,
@@ -364,6 +370,10 @@ async function findObservation(
   obsId: string,
   sessionIdHint?: string,
 ): Promise<CompressedObservation | null> {
+  if (obsId.startsWith("analysis_")) {
+    const pending = await pendingSummaryObservations(kv);
+    return pending.find(o => o.id === obsId && (!sessionIdHint || o.sessionId === sessionIdHint)) ?? null;
+  }
   if (sessionIdHint) {
     const obs = await kv
       .get<CompressedObservation>(KV.observations(sessionIdHint), obsId)

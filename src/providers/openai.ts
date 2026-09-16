@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import type { MemoryProvider } from "../types.js";
 import { getEnvVar } from "../config.js";
 import { fetchWithTimeout } from "./_fetch.js";

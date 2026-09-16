@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import { TriggerAction, type ISdk } from "iii-sdk";
 import type { CompressedObservation, HookPayload, Session } from "../types.js";
 import { KV, STREAM } from "../state/schema.js";

@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 export interface Session {
   id: string;
   project: string;
@@ -147,10 +148,14 @@ export interface AnalysisUsage {
   cacheHitTokens: number;
   finishReason: string;
   outcome?: "valid" | "invalid";
+  failureCode?: string;
+  operation?: "delta" | "rollup";
 }
 
 export interface AnalysisStage {
   batchLimit?: number;
+  successStreak?: number;
+  isolation?: { ids: string[]; limit: number };
   held?: Record<string, { digest: string; error: string }>;
   persistenceFailures?: number;
   done: Record<string, string>;
@@ -160,8 +165,27 @@ export interface AnalysisStage {
     id: string;
     observations: CompressedObservation[];
     previousSummary?: SessionSummary;
+    summaryMode?: "delta";
     result?: { summary?: SessionSummary; nodes?: GraphNode[]; edges?: GraphEdge[] };
   };
+}
+
+export interface SummaryChunk {
+  id: string;
+  createdAt: number;
+  summary: SessionSummary;
+}
+
+export interface SummaryPipeline {
+  sessionId: string;
+  base: SessionSummary | null;
+  chunks: SummaryChunk[];
+  projection: SessionSummary | null;
+  pendingProjection?: SessionSummary;
+  prepared?: { chunkIds: string[]; summary: SessionSummary };
+  attempts: number;
+  retryAt?: number;
+  error?: string;
 }
 
 export interface IncrementalAnalysisState {
@@ -175,6 +199,7 @@ export interface IncrementalAnalysisState {
   nextAt: number | null;
   lastStartedAt: number;
   blocked?: boolean;
+  summaryPaused?: boolean;
 }
 
 export type HookType =

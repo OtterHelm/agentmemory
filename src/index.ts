@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import { registerWorker, TriggerAction } from "iii-sdk";
 import {
   hydrateProcessEnvFromFile,

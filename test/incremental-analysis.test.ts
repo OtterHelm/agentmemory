@@ -1,6 +1,12 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { IncrementalAnalyzer, observationDigest, parseIncrementalGraph, analysisStatus } from "../src/functions/incremental-analysis.js";
+import { IncrementalAnalyzer, observationDigest, parseIncrementalGraph, parseIncrementalSummary, analysisFailureCode, analysisStatus } from "../src/functions/incremental-analysis.js";
 import { KV } from "../src/state/schema.js";
+import { recordAnalysisUsage } from "../src/analysis-usage.js";
+import { pendingSummaryObservations, searchSummaryUpdates } from "../src/functions/summary-pipeline.js";
+import { registerContextFunction } from "../src/functions/context.js";
+import { registerSmartSearchFunction } from "../src/functions/smart-search.js";
+import { registerSearchFunction, getSearchIndex } from "../src/functions/search.js";
 import type { StateKV } from "../src/state/kv.js";
 import type { CompressedObservation, IncrementalAnalysisState } from "../src/types.js";
 
@@ -30,7 +36,158 @@ function harness() {
 beforeEach(() => { vi.stubEnv('GRAPH_EXTRACTION_ENABLED', 'true'); });
 afterEach(() => { vi.unstubAllEnvs(); });
 
+describe('two-stage summaries', () => {
+  beforeEach(()=>{vi.stubEnv('AGENTMEMORY_TWO_STAGE_SUMMARY','true');vi.stubEnv('GRAPH_EXTRACTION_ENABLED','false');});
+  it('exposes pending summaries through context, recall and smart-search expansion',async()=>{
+    const h=harness();const a=h.make();await a.initialize();await h.session();await h.add('o1');await a.enqueue('s1');h.advance();await a.tick();
+    const handlers=new Map<string,any>();
+    const sdk={registerFunction:(id:string,fn:any)=>handlers.set(id,fn),trigger:async()=>({success:true,lessons:[]})} as any;
+    registerContextFunction(sdk,h.kv,1000);registerSearchFunction(sdk,h.kv);
+    registerSmartSearchFunction(sdk,h.kv,async()=>[]);getSearchIndex().clear();
+    const context=await handlers.get('mem::context')({sessionId:'other',project:'test'});
+    expect(context.context).toContain('[Later update]');expect(context.context).toContain('Keep records');
+    const recall=await handlers.get('mem::search')({query:'Updated',project:'test'});
+    expect(recall.results[0].observation.title).toContain('[Pending summary update]');
+    const compact=await handlers.get('mem::smart-search')({query:'Updated',project:'test'});
+    expect(compact.results).toHaveLength(1);
+    const expanded=await handlers.get('mem::smart-search')({expandIds:[compact.results[0].obsId]});
+    expect(expanded.results[0].observation.narrative).toContain('Keep records');
+    const isolated=await handlers.get('mem::smart-search')({expandIds:[compact.results[0].obsId],agentId:'other-agent'});
+    expect(isolated.results).toHaveLength(0);
+    await h.kv.delete(KV.sessions,'s1');expect(await pendingSummaryObservations(h.kv)).toHaveLength(0);
+  });
+  it('publishes searchable deltas immediately and rolls up after four batches', async()=>{
+    const h=harness();const a=h.make();await a.initialize();await h.session();
+    for(let i=0;i<4;i++){
+      await h.add('o'+i);await a.enqueue('s1');h.advance();await a.tick();
+      if(i===0){
+        const summary=await h.kv.get<any>(KV.summaries,'s1');
+        expect(summary.narrative).toContain('Later update 1');
+        expect(await searchSummaryUpdates(h.kv,'memory',3,'test')).toHaveLength(1);
+        expect(await searchSummaryUpdates(h.kv,'memory',3,'other')).toHaveLength(0);
+        expect(await searchSummaryUpdates(h.kv,'memory',3,undefined,'other-agent')).toHaveLength(0);
+      }
+    }
+    expect(h.provider.summarize).toHaveBeenCalledTimes(5);
+    for(const index of [0,1,2,3]) expect(h.provider.summarize.mock.calls[index][1]).toContain('Prior summary:\nNone');
+    const pipeline=await h.kv.get<any>(KV.summaryPipelines,'s1');
+    expect(pipeline.chunks).toHaveLength(0);expect(pipeline.base.observationCount).toBe(4);
+    expect(await pendingSummaryObservations(h.kv)).toHaveLength(0);
+    h.advance(24*60*60000);await a.tick();expect(h.provider.summarize).toHaveBeenCalledTimes(5);
+  });
+  it('flushes one pending chunk after one hour across a restart without new observations',async()=>{
+    const h=harness();const a=h.make();await a.initialize();await h.session();await h.add('o1');await a.enqueue('s1');h.advance();await a.tick();
+    const restarted=h.make();await restarted.initialize();h.advance(59*60000);await restarted.tick();
+    expect(h.provider.summarize).toHaveBeenCalledTimes(1);
+    h.advance(60000);await restarted.tick();expect(h.provider.summarize).toHaveBeenCalledTimes(2);
+    expect((await h.kv.get<any>(KV.summaryPipelines,'s1')).chunks).toHaveLength(0);
+  });
+  it('repairs a failed rollup projection without paying for the result twice',async()=>{
+    const h=harness();const a=h.make();await a.initialize();await h.session();await h.add('o1');await a.enqueue('s1');h.advance();await a.tick();
+    const set=h.kv.set.bind(h.kv);let fail=true;
+    h.kv.set=(async(scope,key,value)=>{if(scope===KV.summaries&&fail){fail=false;throw new Error('disk')};return set(scope,key,value)}) as StateKV['set'];
+    h.advance(60*60000);await a.tick();expect(h.provider.summarize).toHaveBeenCalledTimes(2);
+    h.advance();await h.make().tick();expect(h.provider.summarize).toHaveBeenCalledTimes(2);
+    expect((await h.kv.get<any>(KV.summaryPipelines,'s1')).pendingProjection).toBeUndefined();
+    expect((await h.kv.get<any>(KV.summaries,'s1')).observationCount).toBe(1);
+  });
+  it('pauses on manual summary replacement and does not expose stale pending chunks',async()=>{
+    const h=harness();const a=h.make();await a.initialize();await h.session();await h.add('o1');await a.enqueue('s1');h.advance();await a.tick();
+    const manual={title:'Manual',narrative:'Keep manual data'};await h.kv.set(KV.summaries,'s1',manual);
+    await h.add('o2');await a.enqueue('s1');h.advance(60*60000);await a.tick();
+    expect(h.provider.summarize).toHaveBeenCalledTimes(1);
+    expect(await h.kv.get(KV.summaries,'s1')).toEqual(manual);
+    expect(await pendingSummaryObservations(h.kv)).toHaveLength(0);
+  });
+  it('caps failed rollup attempts while retaining chunks and raw observations',async()=>{
+    const h=harness();const a=h.make();await a.initialize();await h.session();await h.add('o1');await a.enqueue('s1');h.advance();await a.tick();
+    h.provider.summarize.mockResolvedValue('<title>Missing narrative</title>');
+    h.advance(60*60000);for(let i=0;i<5;i++){await a.tick();h.advance();}
+    expect(h.provider.summarize).toHaveBeenCalledTimes(4);
+    expect((await h.kv.get<any>(KV.summaryPipelines,'s1')).chunks).toHaveLength(1);
+    expect(await h.kv.list(KV.observations('s1'))).toHaveLength(1);
+  });
+});
+
 describe('incremental analysis safety', () => {
+  it('records only a diagnostic code for rejected paid responses', async () => {
+    vi.stubEnv('GRAPH_EXTRACTION_ENABLED','false');
+    const h=harness();const a=h.make();await a.initialize();await h.session();await h.add('o1');
+    h.provider.summarize.mockImplementationOnce(async()=>{
+      await recordAnalysisUsage({model:'deepseek-flash',usage:{prompt_tokens:100,completion_tokens:10},choices:[{finish_reason:'stop'}]});
+      return '<title>PRIVATE_RESPONSE</title><narrative>Short</narrative>';
+    });
+    await a.enqueue('s1');h.advance();await a.tick();
+    const usage=await h.kv.list(KV.analysisUsage);
+    expect(usage).toHaveLength(1);
+    expect(usage[0]).toMatchObject({failureCode:'invalid_summary_output:short_narrative',outcome:'invalid'});
+    expect(JSON.stringify(usage)).not.toContain('PRIVATE_RESPONSE');
+    expect((await analysisStatus(h.kv)).failureCounts).toEqual({'invalid_summary_output:short_narrative':1});
+  });
+  it('classifies invalid summaries without exposing provider text', () => {
+    const session={id:'s',project:'test'} as any;
+    for(const [xml,code] of [
+      ['private response with no tags','missing_title'],
+      ['<title>Title</title>','missing_narrative'],
+      ['<title>Title</title><narrative>Short</narrative>','short_narrative'],
+    ]) {
+      expect(()=>parseIncrementalSummary(xml,session,1)).toThrow('invalid_summary_output:'+code);
+    }
+    expect(parseIncrementalSummary(SUMMARY,session,1).narrative).toContain('Keep records');
+    expect(analysisFailureCode(new Error('OpenAI API error (429): private request text'))).toBe('provider_http_429');
+    expect(analysisFailureCode(new Error('private text'))).toBe('analysis_failed');
+  });
+  it('isolates format failures without shrinking subsequent healthy batches', async () => {
+    vi.stubEnv('GRAPH_EXTRACTION_ENABLED','false');
+    const h=harness(); const a=h.make(); await a.initialize(); await h.session();
+    for(let i=0;i<4;i++) await h.add('old'+i);
+    h.provider.summarize.mockResolvedValueOnce('<title>Title</title>');
+    await a.enqueue('s1'); h.advance(); await a.tick();
+    let state=(await h.kv.get<IncrementalAnalysisState>(KV.analysisState,'s1'))!;
+    expect(state.summary.error).toBe('invalid_summary_output:missing_narrative');
+    expect(state.summary.batchLimit).toBeUndefined();
+    expect(state.summary.isolation?.limit).toBe(2);
+    for(let i=0;i<10;i++) await h.add('new'+i);
+    for(let i=0;i<3;i++){h.advance();await h.make().tick();}
+    state=(await h.kv.get<IncrementalAnalysisState>(KV.analysisState,'s1'))!;
+    expect(Object.keys(state.summary.done)).toHaveLength(14);
+    expect(state.summary.isolation).toBeUndefined();
+    expect(h.provider.summarize).toHaveBeenCalledTimes(4);
+  });
+  it('recovers legacy one-record limits across restarts without resetting held or completed work', async () => {
+    vi.stubEnv('GRAPH_EXTRACTION_ENABLED','false');
+    const h=harness();const a=h.make();await a.initialize();await h.session();
+    for(let i=0;i<100;i++) await h.add('o'+String(i).padStart(3,'0'));
+    const held=await h.add('held');await a.enqueue('s1');
+    const state=(await h.kv.get<IncrementalAnalysisState>(KV.analysisState,'s1'))!;
+    state.summary.batchLimit=1;
+    state.summary.held={held:{digest:observationDigest(held),error:'invalid_summary_output'}};
+    state.summary.done.previouslyCompleted='unchanged';
+    await h.kv.set(KV.analysisState,'s1',state);
+    for(let i=0;i<20;i++){h.advance();const restarted=h.make();await restarted.initialize();await restarted.tick();}
+    const result=(await h.kv.get<IncrementalAnalysisState>(KV.analysisState,'s1'))!;
+    expect(h.provider.summarize).toHaveBeenCalledTimes(16);
+    expect(result.summary.batchLimit).toBe(32);
+    expect(Object.keys(result.summary.done)).toHaveLength(101);
+    expect(result.summary.done.previouslyCompleted).toBe('unchanged');
+    expect(result.summary.held).toEqual(state.summary.held);
+    expect(await h.kv.list(KV.observations('s1'))).toHaveLength(101);
+  });
+  it('resets recovery streak on errors and never grows beyond phase caps', async () => {
+    const h=harness();const a=h.make();await a.initialize();await h.session();
+    for(let i=0;i<130;i++) await h.add('o'+String(i).padStart(3,'0'));
+    await a.enqueue('s1');
+    const state=(await h.kv.get<IncrementalAnalysisState>(KV.analysisState,'s1'))!;
+    state.summary.batchLimit=32;state.summary.successStreak=2;
+    state.graph.batchLimit=4;state.graph.successStreak=2;
+    await h.kv.set(KV.analysisState,'s1',state);h.advance();await a.tick();
+    let result=(await h.kv.get<IncrementalAnalysisState>(KV.analysisState,'s1'))!;
+    expect(result.summary.batchLimit).toBe(40);expect(result.graph.batchLimit).toBe(5);
+    h.provider.summarize.mockRejectedValueOnce(new Error('offline private input'));
+    h.advance();await a.tick();result=(await h.kv.get<IncrementalAnalysisState>(KV.analysisState,'s1'))!;
+    expect(result.summary.successStreak).toBe(0);
+    expect(result.summary.error).toBe('analysis_failed');
+  });
   it('shortens an existing 30-minute deadline once without changing completed work', async () => {
     const h=harness(); const a=h.make(); await a.initialize(); await h.session(); await h.add('o1'); await a.enqueue('s1');
     const s=(await h.kv.get<IncrementalAnalysisState>(KV.analysisState,'s1'))!;

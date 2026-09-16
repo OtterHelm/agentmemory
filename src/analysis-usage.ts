@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { logger } from "./logger.js";
@@ -19,6 +20,7 @@ export function analysisCost(usage: AnalysisUsage): number | null {
 export const analysisUsageContext = new AsyncLocalStorage<{
   sessionId: string;
   phase: "summary" | "graph";
+  operation?: "delta" | "rollup";
   record: (usage: AnalysisUsage) => Promise<unknown>;
 }>();
 
@@ -33,6 +35,7 @@ export async function recordAnalysisUsage(data: {
   try {
     await context.record({
       id: randomUUID(), sessionId: context.sessionId, phase: context.phase,
+      ...(context.operation ? { operation: context.operation } : {}),
       timestamp, model: data.model ?? "unknown",
       inputTokens: data.usage?.prompt_tokens ?? 0,
       outputTokens: data.usage?.completion_tokens ?? 0,

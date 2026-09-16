@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const path = new URL('../src/viewer/index.html', import.meta.url);

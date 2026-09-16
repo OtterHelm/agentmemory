@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import { createHash } from "node:crypto";
 import { hasCjk, segmentCjk } from "./cjk-segmenter.js";
 
@@ -9,6 +10,7 @@ export const KV = {
   analysisState: "mem:local-analysis:v1:state",
   analysisHistory: "mem:local-analysis:v1:history",
   analysisUsage: "mem:local-analysis:v1:usage",
+  summaryPipelines: "mem:local-analysis:v1:summary-pipelines",
   config: "mem:config",
   metrics: "mem:metrics",
   health: "mem:health",
