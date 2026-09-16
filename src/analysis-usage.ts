@@ -1,4 +1,4 @@
-// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.md.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { logger } from "./logger.js";

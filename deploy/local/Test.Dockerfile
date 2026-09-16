@@ -1,4 +1,4 @@
-# Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
+# Modified by OtterHelm for this custom distribution; see deploy/local/README.md.
 FROM node:22-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends git python3 && rm -rf /var/lib/apt/lists/*
 WORKDIR /verify

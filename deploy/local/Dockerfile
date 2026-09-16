@@ -1,4 +1,4 @@
-# Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
+# Modified by OtterHelm for this custom distribution; see deploy/local/README.md.
 FROM agentmemory-local:0.9.29
 LABEL org.agentmemory.local-patch="incremental-ko6" org.agentmemory.upstream="e04ba88819c365c9acf9d6661ea802143e728bd6"
 COPY dist/index.mjs dist/index.mjs.map /opt/agentmemory/node_modules/@agentmemory/agentmemory/dist/

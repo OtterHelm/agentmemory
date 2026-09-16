@@ -1,4 +1,4 @@
-# Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
+# Modified by OtterHelm for this custom distribution; see deploy/local/README.md.
 $ErrorActionPreference = 'Stop'
 Push-Location (Resolve-Path "$PSScriptRoot/../..")
 try {

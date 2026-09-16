@@ -1,4 +1,4 @@
-// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.md.
 import { TriggerAction, type ISdk, type ApiRequest } from "iii-sdk";
 import type { Session, CompressedObservation, HookPayload, CommitLink, SessionSummary } from "../types.js";
 import { withKeyedLock } from "../state/keyed-mutex.js";

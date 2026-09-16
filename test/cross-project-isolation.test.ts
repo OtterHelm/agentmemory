@@ -1,4 +1,4 @@
-// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.md.
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 vi.mock("../src/logger.js", () => ({

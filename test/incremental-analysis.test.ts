@@ -1,4 +1,4 @@
-// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.md.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { IncrementalAnalyzer, observationDigest, parseIncrementalGraph, parseIncrementalSummary, analysisFailureCode, analysisStatus } from "../src/functions/incremental-analysis.js";
 import { KV } from "../src/state/schema.js";

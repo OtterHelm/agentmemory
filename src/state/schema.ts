@@ -1,4 +1,4 @@
-// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.md.
 import { createHash } from "node:crypto";
 import { hasCjk, segmentCjk } from "./cjk-segmenter.js";
 
