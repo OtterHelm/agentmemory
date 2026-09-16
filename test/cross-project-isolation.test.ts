@@ -1,3 +1,4 @@
+// Modified by OtterHelm for this custom distribution; see deploy/local/README.ko.md.
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 vi.mock("../src/logger.js", () => ({
@@ -18,6 +19,7 @@ vi.mock("../src/functions/access-tracker.js", () => ({
 }));
 
 vi.mock("../src/config.js", () => ({
+  getEnvVar: (key: string) => process.env[key],
   getAgentId: () => undefined,
   isAgentScopeIsolated: () => false,
 }));
